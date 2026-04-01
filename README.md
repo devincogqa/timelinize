@@ -56,7 +56,7 @@ Timelinize lets you import your data from practically anywhere: your computer, p
 4. **Repeat steps 1-3 as often as desired.** Timelinize will skip any existing data that is the same and only import new content. You could do this every few weeks or months for busy accounts that are most important to you.
 
 > [!CAUTION]
-> Timelinize is in active development and is still  unstable. The schema is still changing, necessitating starting over from a clean slate when updating. Always keep your original source data. Expect to delete and recreate your timelines as you upgrade to new versions/builds.
+> Timelinize is in active development and is still unstable. The schema is still changing, necessitating starting over from a clean slate when updating. Always keep your original source data. Expect to delete and recreate your timelines as you upgrade to new versions/builds.
 
 ## Download and run
 
