@@ -1,0 +1,302 @@
+{
+  "repo_notes": [
+    {
+      "content": ""
+    }
+  ],
+  "pages": [
+    {
+      "title": "Timelinize Overvieww",
+      "purpose": "High-level introduction to Timelinize: what it is, its architecture, key concepts, and how the major subsystems relate. Links to child pages for deeper coverage.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Getting Started & Installation",
+      "purpose": "How to build, install, and run Timelinize from source or via Docker. Covers prerequisites (libvips, CGO, Python sidecar), environment setup, devcontainer usage, and first-run configuration.",
+      "parent": "Timelinize Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Repository Structure & Key Packages",
+      "purpose": "Tour of the top-level directory layout: timeline/, tlzapp/, datasources/, frontend/, internal/, cmd/. Explains the role of each package and how they depend on each other.",
+      "parent": "Timelinize Overview",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Core Timeline Engine",
+      "purpose": "Overview of the timeline/ package: the central data engine responsible for repository lifecycle, data ingestion, storage, search, and maintenance. Links to child pages for each major subsystem.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Repository Lifecycle & Database Layer",
+      "purpose": "How a Timeline repository is created, opened, and managed. Covers the SQLite dual-pool architecture (WritePool/ReadPool), WAL mode, ExFAT workarounds, schema provisioning, and the maintenance loop.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Data Schema & Graph Model",
+      "purpose": "Deep dive into schema.sql: the Items, Entities, Attributes, Relationships, and Embeddings tables. Explains the Item-Entity-Attribute graph, STRICT tables, triggers (prevent_stray_attributes), and the extended_items view.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Ingestion Pipeline & Processing",
+      "purpose": "How data flows from a data source into the database. Covers the processor, Graph batching, the three-phase pipeline (sanitize → download → persist), de-duplication via BLAKE3 hashing, FieldUpdatePolicy merging, and canonical data file storage.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Job System & Async Task Management",
+      "purpose": "How long-running tasks (import, thumbnail generation, embedding generation) are managed. Covers JobAction interface, ActiveJob lifecycle (queued/started/paused/aborted/succeeded/failed), checkpointing, CPU throttling, and the WAL checkpoint on completion.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Search & Query Engine",
+      "purpose": "How items and entities are queried. Covers ItemSearchParams, the SQL builder (prepareSearchQuery), spatial filtering (bounding box, proximity), temporal filtering, relational expansion, vector/semantic search via sqlite-vec, and the classification system.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Thumbnails, Media Processing & ML Embeddings",
+      "purpose": "How media assets are processed after import. Covers thumbnailJob, libvips/ffmpeg integration, AVIF/WebP/WebM generation, thumbhash computation, the Python ML sidecar for vector embeddings (SigLIP2 model), and the embeddingJob.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Entities, Conversations & OAuth2 Accounts",
+      "purpose": "How entities (people, places) are stored, deduplicated, and merged. Covers identity resolution via Identifying Attributes, MergeEntities, conversation aggregation from the relationships table, and OAuth2 account management with persisted token refresh.",
+      "parent": "Core Timeline Engine",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Data Sources",
+      "purpose": "Overview of the pluggable data source system: how sources register themselves, the FileImporter/APIImporter interfaces, the recognition/confidence system, and the full list of supported sources. Links to child pages by category.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Data Source Framework",
+      "purpose": "The DataSource registration pattern (RegisterDataSource, init()), the FileImporter and APIImporter interfaces, DirEntry abstraction, Recognize/Confidence scoring, DirThreshold consolidation, DeepFS archive traversal, and checkpointing for resumable imports.",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Apple Ecosystem Sources",
+      "purpose": "Data sources for Apple platforms: iMessage (chat.db, attributedBody, Tapbacks, Cocoa timestamps), Apple Contacts (AddressBook-v22.abcddb, yearless birthdays), Apple Photos (Photos.sqlite, ZDETECTEDFACE, UTI mapping, Live Photos), iPhone backup, and iCloud.",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Google Ecosystem Sources",
+      "purpose": "Data sources for Google services: Google Photos Takeout (sidecar JSON, truncated filename reconstruction, album folders), Google Location History (JSON/KML formats, on-device records, location processing pipeline), Gmail, and Google Voice.",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Social Media & Messaging Sources",
+      "purpose": "Data sources for social and messaging platforms: Facebook (archive versions, posts, messages, check-ins), Instagram, Telegram (streaming JSON parser), WhatsApp (chat log splitter, polls, attachments), Twitter/X, and SMS Backup & Restore.",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Location & Geospatial Sources",
+      "purpose": "Data sources for geospatial data: GPX files, Strava exports, KML/GX (Google Earth), GeoJSON, NMEA 0183 sentences, and the shared LocationSource/locationProcessor pipeline (deduplication, denoising, clustering, RDP simplification).",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Media, Contacts & Other Sources",
+      "purpose": "Remaining data sources: generic media files (EXIF/XMP/MP4/ID3 metadata extraction, motion pictures), vCard/contact lists (CSV/TSV heuristics), email (.mbox/.eml), calendar (iCal), Firefox browser history, GitHub stars, Flighty flight logs, and the generic timestamp heuristic engine.",
+      "parent": "Data Sources",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Application Layer (tlzapp)",
+      "purpose": "Overview of the tlzapp package: the orchestration layer that wraps the timeline engine with an HTTP server, CLI, and frontend serving. Links to child pages for server, bindings, and configuration.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "HTTP Server & API Endpoints",
+      "purpose": "The HTTP server architecture: DNS rebinding protection, CORS enforcement, route registration, static asset serving, repository-scoped media routes (/repo/{id}/thumbnail, /transcode, /motion-photo), WebSocket log streaming, and the CLI-to-API bridge.",
+      "parent": "Application Layer (tlzapp)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Business Logic Bindings & Import Planning",
+      "purpose": "The App struct's business logic: opening/closing repositories, the two-phase import (PlanImport walk + consolidation, Import execution), interactive imports, settings hot-reload with server restart, and the Python sidecar lifecycle.",
+      "parent": "Application Layer (tlzapp)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Configuration & Platform Utilities",
+      "purpose": "Application configuration (Config struct, JSON persistence, syncOpenRepos), platform-specific file system helpers (Windows/macOS/Linux mount points), signal handling, CLI argument parsing, and the virtual response writer for in-process CLI execution.",
+      "parent": "Application Layer (tlzapp)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Frontend (Web UI)",
+      "purpose": "Overview of the web-based single-page application: technology stack (Tabler/Bootstrap, Mapbox GL, Luxon, TomSelect, ECharts), the tlz global namespace, and how the SPA communicates with the backend. Links to child pages for each major UI area.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "SPA Architecture & Routing",
+      "purpose": "How the single-page application works: navigateSPA routing, page controller lifecycle (load/render/unload), tlz.pageControllers registry, URL rewriting, repository/owner initialization sequence, and the MutationObserver for map containers.",
+      "parent": "Frontend (Web UI)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Common UI Components & Utilities",
+      "purpose": "Shared frontend building blocks: newDatePicker (AirDatepicker with range/time toggle), newFilePicker (server-side filesystem navigator), newEntitySelect (TomSelect wrapper), newDataSourceSelect, itemContentElement polymorphic renderer, thumbhash placeholders, and the WebSocket log pipeline.",
+      "parent": "Frontend (Web UI)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Timeline, Gallery & Map Views",
+      "purpose": "The three primary data visualization views: the timeline grouping algorithm (temporal locality clustering), the gallery (media grid with thumbhash lazy loading, pagination), and the map view (Mapbox GL journey lines, heatmaps, balloon markers, adjacency search, bounding box/proximity filters).",
+      "parent": "Frontend (Web UI)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Import UI & Job Monitoring",
+      "purpose": "The import workflow UI: file picker → PlanImport → DS group accordion → data source options modals (owner entity, RDP simplification, clustering coefficient) → processing options → job submission. Job monitoring: real-time progress bars, throughput charts (ECharts), job state machine, and start/pause/cancel controls.",
+      "parent": "Frontend (Web UI)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Conversations, Entities & Settings Pages",
+      "purpose": "Remaining frontend pages: conversations view (cross-source message aggregation, participant grouping), entities list and detail pages (merge UI, attribute display, charts), item detail page, and the settings page (demo/obfuscation mode, secret location circles with MapboxDraw).",
+      "parent": "Frontend (Web UI)",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Privacy & Obfuscation (Demo Mode)",
+      "purpose": "How Timelinize protects sensitive data in demo/presentation contexts. Covers PopulateWithFakeData (synthetic dataset generation), the Anonymize pipeline (deterministic name/location/file obfuscation using seeded PRNG), ObfuscatedLocation zones, and the frontend obfuscation mode (blurred images, empty src attributes).",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    },
+    {
+      "title": "Infrastructure, Build & CI/CD",
+      "purpose": "How Timelinize is built, tested, and released. Covers the multi-platform binary pipeline (Windows/MSYS2, macOS/Homebrew, Linux/source-compiled libvips), Docker multi-stage build, GitHub Actions workflows, GoReleaser, linting, and testing.",
+      "page_notes": [
+        {
+          "content": ""
+        }
+      ]
+    }
+  ]
+}
