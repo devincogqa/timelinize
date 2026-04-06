@@ -204,8 +204,8 @@ func (s *server) handleFileStat(w http.ResponseWriter, r *http.Request) error {
 	return jsonResponse(w, result, nil)
 }
 
-func (server) handleLogs(w http.ResponseWriter, r *http.Request) error {
-	conn, err := wsUpgrader.Upgrade(w, r, nil)
+func (s server) handleLogs(w http.ResponseWriter, r *http.Request) error {
+	conn, err := s.upgradeWebSocket(w, r)
 	if err != nil {
 		return Error{
 			Err:        err,
@@ -505,10 +505,20 @@ func (server) handleFileListing(w http.ResponseWriter, r *http.Request) error {
 	return jsonResponse(w, result, nil)
 }
 
-var wsUpgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	// Origin is already enforced by the enforceOriginAndMethod middleware,
-	// but we keep the default CheckOrigin (which requires same-origin) as
-	// defense-in-depth. Override via server.upgradeWebSocket if needed.
+// upgradeWebSocket upgrades the HTTP connection to a WebSocket, using the
+// server's allowedOrigins list for origin validation. This keeps the
+// WebSocket origin policy consistent with enforceOriginAndMethod.
+func (s server) upgradeWebSocket(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := s.getOrigin(r)
+			if origin == nil {
+				return true // no Origin header (e.g. same-origin or non-browser client)
+			}
+			return s.originAllowed(origin)
+		},
+	}
+	return upgrader.Upgrade(w, r, nil)
 }
