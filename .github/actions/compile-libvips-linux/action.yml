@@ -1,43 +1,32 @@
 name: 'Set up libvips'
 description: 'Build and cache libvips from source (useful because Ubuntu package is often too old)'
+inputs:
+  libvips-version:
+    description: 'Version of libvips to build (pin this to avoid flaky GitHub API lookups and unexpected cache invalidation)'
+    required: false
+    default: '8.18.2'
 runs:
   using: 'composite'
   steps:
-    - name: Get latest libvips version
-      id: libvips-version
-      shell: bash
-      # sometimes this step spuriously fails; just kick it (restart the job) and it should work again
-      run: |
-        LATEST_VERSION=$(curl -s https://api.github.com/repos/libvips/libvips/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-        echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
-        echo "Latest libvips version: $LATEST_VERSION"
-
     - name: Cache libvips
       id: cache-libvips
       uses: actions/cache@v4
       with:
         path: /opt/libvips
-        key: libvips-${{ steps.libvips-version.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+        key: libvips-${{ inputs.libvips-version }}-${{ runner.os }}-${{ runner.arch }}
 
-    # The next few steps are derived from instrations at:
+    # The next few steps are derived from instructions at:
     # https://github.com/libvips/libvips/wiki/Build-for-Ubuntu#building-from-source
 
-    - name: Set up build environment
+    # Runtime/dev libraries are always needed: pkg-config and -dev packages
+    # provide .pc files and headers required by CGO during the Go build step.
+    - name: Install library dependencies
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt install -y \
-          build-essential \
+        sudo apt-get install -y --no-install-recommends \
           pkg-config \
           libglib2.0-dev \
-          bc \
-          meson \
-          ninja-build
-
-    - name: Install libvips dependencies
-      shell: bash
-      run: |
-        sudo apt install -y \
           libcfitsio-dev \
           libexif-dev \
           libexpat1-dev \
@@ -58,8 +47,19 @@ runs:
           libtiff5-dev \
           libwebp-dev
 
+    # Build tools are only needed when compiling from source (cache miss)
+    - name: Install build tools
+      if: steps.cache-libvips.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          bc \
+          meson \
+          ninja-build
+
     # the official instructions refer to a PPA that was archived just a few days
-    # ago at time of writing this comment, so build cgif from soure instead
+    # ago at time of writing this comment, so build cgif from source instead
     # (this isn't strictly required, only if rendering animated gifs at runtime)
     - name: Build and install cgif (optional libvips dependency)
       if: steps.cache-libvips.outputs.cache-hit != 'true'
@@ -76,7 +76,7 @@ runs:
       if: steps.cache-libvips.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        VERSION=${{ steps.libvips-version.outputs.version }}
+        VERSION=${{ inputs.libvips-version }}
         wget https://github.com/libvips/libvips/archive/refs/tags/v${VERSION}.tar.gz
         tar xf v${VERSION}.tar.gz
         cd libvips-${VERSION}
