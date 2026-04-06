@@ -33,8 +33,8 @@ func oauth2App(providerID string, scopes []string) oauth2client.App {
 	// TODO: if we ever allow user-configurable OAuth2 apps (so they can have their own rate limits and such)
 	// then using a LocalAppSource would be the way to go:
 	// cfg := oauth2.Config{
-	// 	ClientID:     "NFJuNXlmSFFhWEdYcDRsMlFETko6MTpjaQ",
-	// 	ClientSecret: "t0la1nDJRMz2JDuj2z7OWIF01kM4_Vtkvie4-mij3DmoGFozZO",
+	// 	ClientID:     "<your-client-id>",
+	// 	ClientSecret: "<your-client-secret>",
 	// 	Endpoint: oauth2.Endpoint{
 	// 		AuthURL:   "https://twitter.com/i/oauth2/authorize",
 	// 		TokenURL:  "https://api.twitter.com/2/oauth2/token",

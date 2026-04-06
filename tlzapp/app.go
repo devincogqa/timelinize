@@ -385,31 +385,34 @@ func (app *App) serve() error {
 		addRoute(apiBasePath+command, endpoint)
 	}
 
-	// debug endpoints
-	addRoute("/debug/pprof/", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(http.HandlerFunc(pprof.Index)),
-	})
-	addRoute("/debug/pprof/cmdline", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(http.HandlerFunc(pprof.Cmdline)),
-	})
-	addRoute("/debug/pprof/profile", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(http.HandlerFunc(pprof.Profile)),
-	})
-	addRoute("/debug/pprof/symbol", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(http.HandlerFunc(pprof.Symbol)),
-	})
-	addRoute("/debug/pprof/trace", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(http.HandlerFunc(pprof.Trace)),
-	})
-	addRoute("/debug/vars", Endpoint{
-		Method:  http.MethodGet,
-		Handler: httpWrap(expvar.Handler()),
-	})
+	// debug endpoints (only enabled when TLZ_DEBUG=1 is set)
+	if os.Getenv("TLZ_DEBUG") == "1" {
+		app.log.Warn("debug/pprof endpoints are enabled (TLZ_DEBUG=1); disable in production")
+		addRoute("/debug/pprof/", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(http.HandlerFunc(pprof.Index)),
+		})
+		addRoute("/debug/pprof/cmdline", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(http.HandlerFunc(pprof.Cmdline)),
+		})
+		addRoute("/debug/pprof/profile", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(http.HandlerFunc(pprof.Profile)),
+		})
+		addRoute("/debug/pprof/symbol", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(http.HandlerFunc(pprof.Symbol)),
+		})
+		addRoute("/debug/pprof/trace", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(http.HandlerFunc(pprof.Trace)),
+		})
+		addRoute("/debug/vars", Endpoint{
+			Method:  http.MethodGet,
+			Handler: httpWrap(expvar.Handler()),
+		})
+	}
 
 	// TODO: remote server (with TLS mutual auth)
 

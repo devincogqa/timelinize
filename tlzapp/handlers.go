@@ -508,5 +508,7 @@ func (server) handleFileListing(w http.ResponseWriter, r *http.Request) error {
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(_ *http.Request) bool { return true }, // we check Origin earlier
+	// Origin is already enforced by the enforceOriginAndMethod middleware,
+	// but we keep the default CheckOrigin (which requires same-origin) as
+	// defense-in-depth. Override via server.upgradeWebSocket if needed.
 }
