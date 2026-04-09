@@ -17,6 +17,8 @@ Timelinize lets you import your data from practically anywhere: your computer, p
 
 **[Join our Discord](https://discord.gg/C9dCnTW6qV)** to discuss!
 
+<!-- Dummy change for testing purposes -->
+
 
 > [!TIP]  
 > Screenshots and videos here portray real timelines containing real data in **demo mode**, which obfuscates the sensitive information. Images are blurred, names and other identifiers are replaced with random data, and some locations are faked. Your timeline will show the real data.
