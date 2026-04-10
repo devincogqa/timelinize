@@ -171,16 +171,28 @@ func (tl *Timeline) deleteThumbnails(ctx context.Context, itemRowIDs []uint64, d
 	}
 	defer thumbsTx.Rollback()
 
-	for _, itemID := range itemRowIDs {
-		_, err = thumbsTx.ExecContext(ctx, `DELETE FROM thumbnails WHERE item_id=?`, itemID)
+	if len(itemRowIDs) > 0 {
+		array, args := sqlArray(itemRowIDs)
+		_, err = thumbsTx.ExecContext(ctx, `DELETE FROM thumbnails WHERE item_id IN `+array, args...)
 		if err != nil {
-			return fmt.Errorf("unable to delete thumbnail row for erased item %d: %w", itemID, err)
+			return fmt.Errorf("unable to delete thumbnail rows for erased items: %w", err)
 		}
 	}
-	for _, dataFile := range dataFiles {
-		_, err = thumbsTx.ExecContext(ctx, `DELETE FROM thumbnails WHERE data_file=?`, dataFile)
+	if len(dataFiles) > 0 {
+		var sb strings.Builder
+		args := make([]any, 0, len(dataFiles))
+		sb.WriteRune('(')
+		for i, dataFile := range dataFiles {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteRune('?')
+			args = append(args, dataFile)
+		}
+		sb.WriteRune(')')
+		_, err = thumbsTx.ExecContext(ctx, `DELETE FROM thumbnails WHERE data_file IN `+sb.String(), args...)
 		if err != nil {
-			return fmt.Errorf("unable to delete thumbnail row for data file %s: %w", dataFile, err)
+			return fmt.Errorf("unable to delete thumbnail rows for data files: %w", err)
 		}
 	}
 

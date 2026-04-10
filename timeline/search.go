@@ -420,10 +420,10 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 	// be in the results by filtering with other search parameters, then we do
 	// distance calculations over that subset of the data, which is theoretically
 	// faster (see https://github.com/asg017/sqlite-vec/issues/196#issuecomment-2643543058)
-	var q string
+	var sb strings.Builder
 	vectorSearch := params.SemanticText != "" || params.SimilarTo > 0
 	if vectorSearch {
-		q = "WITH search_results AS (\n"
+		sb.WriteString("WITH search_results AS (\n")
 	}
 
 	// honor inclusivity for bounding-box searches
@@ -432,34 +432,32 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 		lt, gt = "<=", ">="
 	}
 
-	// TODO: use strings.Builder (also in RecentConversations())
-
-	q += fmt.Sprintf("\t\tSELECT %s, entities.id, entities.name, entities.picture_file, attributes.name, attributes.value, attributes.alt_value, embeddings.id", itemDBColumns)
 	if params.OnlyTotal {
-		q = "\t\tSELECT count(DISTINCT items.id)"
-	}
-	if params.GeoJSON {
+		sb.WriteString("\t\tSELECT count(DISTINCT items.id)")
+	} else if params.GeoJSON {
 		// GeoJSON mode is intended to be more efficient; as such, only select coordinate data
-		q = "\t\tSELECT items.id, items.latitude, items.longitude"
+		sb.WriteString("\t\tSELECT items.id, items.latitude, items.longitude")
+	} else {
+		fmt.Fprintf(&sb, "\t\tSELECT %s, entities.id, entities.name, entities.picture_file, attributes.name, attributes.value, attributes.alt_value, embeddings.id", itemDBColumns)
 	}
 	if params.WithTotal {
-		q += ", count() over() AS total_count"
+		sb.WriteString(", count() over() AS total_count")
 	}
-	q += `
+	sb.WriteString(`
 		FROM extended_items AS items
 		LEFT JOIN attributes ON items.attribute_id = attributes.id
 		LEFT JOIN entity_attributes ON attributes.id = entity_attributes.attribute_id
 		LEFT JOIN entities ON entity_attributes.entity_id = entities.id
-		LEFT JOIN embeddings ON embeddings.item_id = items.id`
+		LEFT JOIN embeddings ON embeddings.item_id = items.id`)
 
 	// TODO: It's possible that we could move all these (ToAttributeID, ToEntityID, rootItemsOnly) into RelationParams
 	if len(params.ToAttributeID) > 0 || len(params.ToEntityID) > 0 {
-		q += `
-		JOIN relationships ON relationships.from_item_id = items.id`
+		sb.WriteString(`
+		JOIN relationships ON relationships.from_item_id = items.id`)
 	} else if rootItemsOnly || len(params.Relations) > 0 {
-		q += `
+		sb.WriteString(`
 		LEFT JOIN relationships ON relationships.to_item_id = items.id
-		LEFT JOIN relations ON relations.id = relationships.relation_id`
+		LEFT JOIN relations ON relations.id = relationships.relation_id`)
 	}
 
 	// build the WHERE in terms of groups of OR's that are AND'ed together
@@ -467,30 +465,34 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 	var clauseCount int
 	and := func(ors func()) {
 		clauseCount = 0
+		lenBefore := sb.Len()
 		if len(args) == 0 {
-			q += "\n\t\tWHERE"
+			sb.WriteString("\n\t\tWHERE")
 		} else {
 			if params.OrFields {
-				q += " OR"
+				sb.WriteString(" OR")
 			} else {
-				q += " AND"
+				sb.WriteString(" AND")
 			}
 		}
-		q += " ("
+		sb.WriteString(" (")
 		ors()
-		q += ")"
+		sb.WriteString(")")
 
-		// if the clause turned out to be empty,
-		// this is a poor-man's way of undoing it
-		q = strings.TrimSuffix(q, " OR ()")
-		q = strings.TrimSuffix(q, " AND ()")
-		q = strings.TrimSuffix(q, "\n\t\tWHERE ()")
+		// if the clause turned out to be empty, undo it by
+		// truncating the builder back to where we started
+		if clauseCount == 0 {
+			// reset builder to lenBefore by reconstructing
+			tmp := sb.String()[:lenBefore]
+			sb.Reset()
+			sb.WriteString(tmp)
+		}
 	}
 	or := func(clause string, val any) {
 		if clauseCount > 0 {
-			q += " OR "
+			sb.WriteString(" OR ")
 		}
-		q += clause
+		sb.WriteString(clause)
 		args = append(args, val)
 		clauseCount++
 	}
@@ -694,24 +696,24 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 	}
 
 	if !params.OnlyTotal {
-		q += "\n\t\tGROUP BY items.id"
+		sb.WriteString("\n\t\tGROUP BY items.id")
 	}
 
 	// don't put order in the temporary table, since we'll be ordering by vector distance
 	if !vectorSearch {
 		if params.Sort != SortNone {
-			q += "\n\t\tORDER BY "
+			sb.WriteString("\n\t\tORDER BY ")
 
 			// TODO: not sure if this is how autocomplete will work or be useful, but basically
 			// this sorts by data text so that if it's a prefix, it's weighed higher in the
 			// sort, and if it's a suffix then put it at the end; i.e. favor term at beginning
 			// of words instead of end... I think that's what this does, at least
 			if params.PreferPrefix && len(params.DataText) == 1 {
-				q += `CASE
+				sb.WriteString(`CASE
 					WHEN items.data_text LIKE ? || '%' THEN 1
 					WHEN items.data_text LIKE '%' || ? THEN 3
 					ELSE 2
-				END, `
+				END, `)
 				args = append(args, params.DataText[0], params.DataText[0])
 			}
 
@@ -737,21 +739,24 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 				// math.Cos() takes radians, hence the conversion to radians inside the cosine
 				cosLat2 := math.Pow(math.Cos(*params.Latitude*math.Pi/180.0), 2) //nolint:mnd
 				sortDir = string(SortAsc)                                        // always sort ascending for nearest
-				q += "((?-items.latitude) * (?-items.latitude)) + ((?-items.longitude) * (?-items.longitude) * ?), items.id " + sortDir
+				sb.WriteString("((?-items.latitude) * (?-items.latitude)) + ((?-items.longitude) * (?-items.longitude) * ?), items.id ")
+				sb.WriteString(sortDir)
 				args = append(args, params.Latitude, params.Latitude, params.Longitude, params.Longitude, cosLat2)
 
 			case params.Timestamp != nil:
 				// nearest to timestamp
 				sortDir = string(SortAsc) // always sort ascending for nearest
-				q += "abs(?-items.timestamp), items.id " + sortDir
+				sb.WriteString("abs(?-items.timestamp), items.id ")
+				sb.WriteString(sortDir)
 				args = append(args, params.Timestamp.UnixMilli())
 
 			case params.OrderBy == "stored":
-				q += "items.stored " + sortDir
+				sb.WriteString("items.stored ")
+				sb.WriteString(sortDir)
 
 			default:
 				// generic sort, which is timestamp and row ID
-				q += fmt.Sprintf("items.timestamp %s, items.id %s", sortDir, sortDir)
+				fmt.Fprintf(&sb, "items.timestamp %s, items.id %s", sortDir, sortDir)
 			}
 		}
 
@@ -761,11 +766,11 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 				params.Limit = 1000
 			}
 			if params.Limit > 0 {
-				q += "\n\t\tLIMIT ?"
+				sb.WriteString("\n\t\tLIMIT ?")
 				args = append(args, params.Limit)
 			}
 			if params.Offset > 0 {
-				q += "\n\t\tOFFSET ?"
+				sb.WriteString("\n\t\tOFFSET ?")
 				args = append(args, params.Offset)
 			}
 		}
@@ -790,7 +795,7 @@ func (tl *Timeline) prepareSearchQuery(ctx context.Context, params ItemSearchPar
 			args = append(args, string(embedding))
 		}
 
-		q += fmt.Sprintf(`
+		fmt.Fprintf(&sb, `
 )
 SELECT
 	search_results.*,
@@ -802,16 +807,16 @@ ORDER BY distance`, targetVectorClause)
 			params.Limit = 100
 		}
 		if params.Limit > 0 {
-			q += "\nLIMIT ?"
+			sb.WriteString("\nLIMIT ?")
 			args = append(args, params.Limit)
 		}
 		if params.Offset > 0 {
-			q += "\nOFFSET ?"
+			sb.WriteString("\nOFFSET ?")
 			args = append(args, params.Offset)
 		}
 	}
 
-	return q, args, nil
+	return sb.String(), args, nil
 }
 
 func (tl *Timeline) expandRelationships(ctx context.Context, tx *sql.Tx, degrees int, sr *SearchResult) error {
