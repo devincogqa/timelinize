@@ -159,197 +159,8 @@ func (tl *Timeline) loadRecentConversations(ctx context.Context, tx *sql.Tx, par
 	for len(convosMap) < params.Limit && queries < maxQueries {
 		queries++
 
-		var whereClause strings.Builder
-		whereClause.WriteString(`WHERE relationships.to_attribute_id IS NOT NULL`)
-		var args []any
-
-		// include only conversational items and relations; otherwise we get results like
-		// media where people are depicted, or any other items that point to entities...
-		whereClause.WriteString(" AND (relationships.relation_id IN (?, ?) OR items.classification_id IN (?, ?, ?))")
-		args = append(args,
-			tl.relations[RelSent.Label],
-			tl.relations[RelReply.Label],
-			tl.classifications[ClassEmail.Name],
-			tl.classifications[ClassMessage.Name],
-			tl.classifications[ClassSocial.Name],
-		)
-
-		if len(params.classificationIDs) > 0 {
-			whereClause.WriteString(" AND (")
-			for i, classID := range params.classificationIDs {
-				if i > 0 {
-					whereClause.WriteString(" OR ")
-				}
-				whereClause.WriteString("items.classification_id=?")
-				args = append(args, classID)
-			}
-			whereClause.WriteString(")")
-		}
-		if len(params.AttributeID) > 0 {
-			whereClause.WriteString(" AND (")
-			for i, attrID := range params.AttributeID {
-				if i > 0 {
-					whereClause.WriteString(" OR ")
-				}
-				whereClause.WriteString("items.attribute_id=?")
-				args = append(args, attrID)
-			}
-			whereClause.WriteString(")")
-		}
-		if len(params.ToAttributeID) > 0 {
-			whereClause.WriteString(" AND (")
-			for i, attrID := range params.ToAttributeID {
-				if i > 0 {
-					whereClause.WriteString(" OR ")
-				}
-				whereClause.WriteString("relationships.to_attribute_id=?")
-				args = append(args, attrID)
-			}
-			whereClause.WriteString(")")
-		}
-		if len(params.EntityID) > 0 {
-			whereClause.WriteString(" AND (")
-			for i, entityID := range params.EntityID {
-				if i > 0 {
-					whereClause.WriteString(" OR ")
-				}
-				whereClause.WriteString("from_ent.id=? OR to_ent.id=?")
-				args = append(args, entityID, entityID)
-			}
-			whereClause.WriteString(")")
-		}
-		if len(params.DataText) > 0 {
-			whereClause.WriteString(" AND (")
-			for i, txt := range params.DataText {
-				if i > 0 {
-					whereClause.WriteString(" OR ")
-				}
-				whereClause.WriteString("items.data_text LIKE '%' || ? || '%'")
-				args = append(args, txt)
-			}
-			whereClause.WriteString(")")
-		}
-		if params.StartTimestamp != nil {
-			whereClause.WriteString(" AND items.timestamp > ?")
-			args = append(args, params.StartTimestamp.UnixMilli())
-		}
-		if params.EndTimestamp != nil && (untilUnixMs == 0 || untilUnixMs > params.EndTimestamp.UnixMilli()) {
-			whereClause.WriteString(andItemsTimestampLessThanArg)
-			args = append(args, params.EndTimestamp.UnixMilli())
-		} else if untilUnixMs > 0 {
-			whereClause.WriteString(andItemsTimestampLessThanArg)
-			args = append(args, untilUnixMs)
-		}
-
-		args = append(args, rowLimit)
-
-		//nolint:gosec
-		q := `SELECT ` + itemDBColumns + `,
-				relationships.to_attribute_id,
-				from_attr.name, to_attr.name,
-				from_attr.value, to_attr.value,
-				from_ent.id, from_ent.name, from_ent.picture_file,
-				to_ent.id, to_ent.name, to_ent.picture_file
-			FROM extended_items AS items
-			LEFT JOIN relationships ON relationships.from_item_id = items.id
-			LEFT JOIN entity_attributes from_ea ON from_ea.attribute_id = items.attribute_id
-			LEFT JOIN entity_attributes to_ea ON to_ea.attribute_id = relationships.to_attribute_id
-			LEFT JOIN entities AS from_ent ON from_ent.id = from_ea.entity_id
-			LEFT JOIN entities AS to_ent ON to_ent.id = to_ea.entity_id
-			LEFT JOIN attributes AS from_attr ON from_attr.id = from_ea.attribute_id
-			LEFT JOIN attributes AS to_attr ON to_attr.id = to_ea.attribute_id
-			` + whereClause.String() + `
-			ORDER BY items.timestamp DESC
-			LIMIT ?`
-
-		rows, err := tx.QueryContext(ctx, q, args...)
+		count, err := tl.loadRecentConversationPage(ctx, tx, params, currentConvo, &lastItemID, &untilUnixMs, rowLimit, previewSize, saveConvoAndReset)
 		if err != nil {
-			return nil, err
-		}
-		defer rows.Close() // FIXME: This is a bug since it's in a for loop; extract into own function
-
-		var count int
-
-		for rows.Next() {
-			var fromAttr, toAttr nullableAttribute
-			var fromEntity, toEntity Entity
-			ir, err := scanItemRow(rows, []any{&toAttr.ID,
-				&fromAttr.Name, &toAttr.Name,
-				&fromAttr.Value, &toAttr.Value,
-				&fromEntity.id, &fromEntity.name, &fromEntity.Picture,
-				&toEntity.id, &toEntity.name, &toEntity.Picture})
-			if err != nil {
-				return nil, fmt.Errorf("loading recent conversations: %w", err)
-			}
-			count++
-
-			if ir.ID != lastItemID {
-				// this row is a new item, so what we have aggregated so far represents a single conversation
-				if !saveConvoAndReset() {
-					break
-				}
-			}
-
-			// remember this item ID for the next row so we can know if we've moved to the next item
-			lastItemID = ir.ID
-
-			// append this message to the current conversation aggregate
-			if len(currentConvo.RecentMessages) < previewSize {
-				currentConvo.RecentMessages = append(currentConvo.RecentMessages, ir)
-			}
-
-			// move nullable ints into non-nullable fields that are read from (and which are easier and safer to work with)
-			if fromEntity.id != nil {
-				fromEntity.ID = *fromEntity.id
-			}
-			if toEntity.id != nil {
-				toEntity.ID = *toEntity.id
-			}
-
-			// record the sender and receiver as part of this conversation
-			if fromEntity.ID > 0 {
-				currentConvo.entities.appendIfUnique(fromEntity.ID)
-			}
-			if toEntity.ID > 0 {
-				currentConvo.entities.appendIfUnique(toEntity.ID)
-			}
-
-			// if entity not added to conversation yet, do so now
-			// TODO: a more correct algorithm is to add the entity if it doesn't exist, but if it does, add the attribute to it if it isn't already
-			var fromEntFound, toEntFound bool
-			for _, ent := range currentConvo.Entities {
-				if fromEntFound && toEntFound {
-					break
-				}
-				if ent.ID == fromEntity.ID {
-					fromEntFound = true
-					continue
-				}
-				if ent.ID == toEntity.ID {
-					toEntFound = true
-					continue
-				}
-			}
-			if !fromEntFound {
-				if fromEntity.name != nil {
-					fromEntity.Name = *fromEntity.name
-				}
-				fromEntity.Attributes = append(fromEntity.Attributes, fromAttr.attribute())
-				currentConvo.Entities = append(currentConvo.Entities, fromEntity)
-			}
-			if !toEntFound {
-				if toEntity.name != nil {
-					toEntity.Name = *toEntity.name
-				}
-				toEntity.Attributes = append(toEntity.Attributes, toAttr.attribute())
-				currentConvo.Entities = append(currentConvo.Entities, toEntity)
-			}
-
-			if ir.Timestamp != nil {
-				untilUnixMs = ir.Timestamp.UnixMilli()
-			}
-		}
-		if err := rows.Err(); err != nil {
 			return nil, err
 		}
 
@@ -362,6 +173,210 @@ func (tl *Timeline) loadRecentConversations(ctx context.Context, tx *sql.Tx, par
 	saveConvoAndReset()
 
 	return convosMap, nil
+}
+
+// loadRecentConversationPage runs a single paged query for recent conversations.
+// Extracted from the loop in loadRecentConversations so that defer rows.Close()
+// is properly scoped to each iteration instead of accumulating across loop iterations.
+func (tl *Timeline) loadRecentConversationPage(ctx context.Context, tx *sql.Tx, params ItemSearchParams,
+	currentConvo *Conversation, lastItemID *uint64, untilUnixMs *int64, rowLimit, previewSize int,
+	saveConvoAndReset func() bool) (int, error) {
+
+	var whereClause strings.Builder
+	whereClause.WriteString(`WHERE relationships.to_attribute_id IS NOT NULL`)
+	var args []any
+
+	// include only conversational items and relations; otherwise we get results like
+	// media where people are depicted, or any other items that point to entities...
+	whereClause.WriteString(" AND (relationships.relation_id IN (?, ?) OR items.classification_id IN (?, ?, ?))")
+	args = append(args,
+		tl.relations[RelSent.Label],
+		tl.relations[RelReply.Label],
+		tl.classifications[ClassEmail.Name],
+		tl.classifications[ClassMessage.Name],
+		tl.classifications[ClassSocial.Name],
+	)
+
+	if len(params.classificationIDs) > 0 {
+		whereClause.WriteString(" AND (")
+		for i, classID := range params.classificationIDs {
+			if i > 0 {
+				whereClause.WriteString(" OR ")
+			}
+			whereClause.WriteString("items.classification_id=?")
+			args = append(args, classID)
+		}
+		whereClause.WriteString(")")
+	}
+	if len(params.AttributeID) > 0 {
+		whereClause.WriteString(" AND (")
+		for i, attrID := range params.AttributeID {
+			if i > 0 {
+				whereClause.WriteString(" OR ")
+			}
+			whereClause.WriteString("items.attribute_id=?")
+			args = append(args, attrID)
+		}
+		whereClause.WriteString(")")
+	}
+	if len(params.ToAttributeID) > 0 {
+		whereClause.WriteString(" AND (")
+		for i, attrID := range params.ToAttributeID {
+			if i > 0 {
+				whereClause.WriteString(" OR ")
+			}
+			whereClause.WriteString("relationships.to_attribute_id=?")
+			args = append(args, attrID)
+		}
+		whereClause.WriteString(")")
+	}
+	if len(params.EntityID) > 0 {
+		whereClause.WriteString(" AND (")
+		for i, entityID := range params.EntityID {
+			if i > 0 {
+				whereClause.WriteString(" OR ")
+			}
+			whereClause.WriteString("from_ent.id=? OR to_ent.id=?")
+			args = append(args, entityID, entityID)
+		}
+		whereClause.WriteString(")")
+	}
+	if len(params.DataText) > 0 {
+		whereClause.WriteString(" AND (")
+		for i, txt := range params.DataText {
+			if i > 0 {
+				whereClause.WriteString(" OR ")
+			}
+			whereClause.WriteString("items.data_text LIKE '%' || ? || '%'")
+			args = append(args, txt)
+		}
+		whereClause.WriteString(")")
+	}
+	if params.StartTimestamp != nil {
+		whereClause.WriteString(" AND items.timestamp > ?")
+		args = append(args, params.StartTimestamp.UnixMilli())
+	}
+	if params.EndTimestamp != nil && (*untilUnixMs == 0 || *untilUnixMs > params.EndTimestamp.UnixMilli()) {
+		whereClause.WriteString(andItemsTimestampLessThanArg)
+		args = append(args, params.EndTimestamp.UnixMilli())
+	} else if *untilUnixMs > 0 {
+		whereClause.WriteString(andItemsTimestampLessThanArg)
+		args = append(args, *untilUnixMs)
+	}
+
+	args = append(args, rowLimit)
+
+	//nolint:gosec
+	q := `SELECT ` + itemDBColumns + `,
+			relationships.to_attribute_id,
+			from_attr.name, to_attr.name,
+			from_attr.value, to_attr.value,
+			from_ent.id, from_ent.name, from_ent.picture_file,
+			to_ent.id, to_ent.name, to_ent.picture_file
+		FROM extended_items AS items
+		LEFT JOIN relationships ON relationships.from_item_id = items.id
+		LEFT JOIN entity_attributes from_ea ON from_ea.attribute_id = items.attribute_id
+		LEFT JOIN entity_attributes to_ea ON to_ea.attribute_id = relationships.to_attribute_id
+		LEFT JOIN entities AS from_ent ON from_ent.id = from_ea.entity_id
+		LEFT JOIN entities AS to_ent ON to_ent.id = to_ea.entity_id
+		LEFT JOIN attributes AS from_attr ON from_attr.id = from_ea.attribute_id
+		LEFT JOIN attributes AS to_attr ON to_attr.id = to_ea.attribute_id
+		` + whereClause.String() + `
+		ORDER BY items.timestamp DESC
+		LIMIT ?`
+
+	rows, err := tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	var count int
+
+	for rows.Next() {
+		var fromAttr, toAttr nullableAttribute
+		var fromEntity, toEntity Entity
+		ir, err := scanItemRow(rows, []any{&toAttr.ID,
+			&fromAttr.Name, &toAttr.Name,
+			&fromAttr.Value, &toAttr.Value,
+			&fromEntity.id, &fromEntity.name, &fromEntity.Picture,
+			&toEntity.id, &toEntity.name, &toEntity.Picture})
+		if err != nil {
+			return 0, fmt.Errorf("loading recent conversations: %w", err)
+		}
+		count++
+
+		if ir.ID != *lastItemID {
+			// this row is a new item, so what we have aggregated so far represents a single conversation
+			if !saveConvoAndReset() {
+				break
+			}
+		}
+
+		// remember this item ID for the next row so we can know if we've moved to the next item
+		*lastItemID = ir.ID
+
+		// append this message to the current conversation aggregate
+		if len(currentConvo.RecentMessages) < previewSize {
+			currentConvo.RecentMessages = append(currentConvo.RecentMessages, ir)
+		}
+
+		// move nullable ints into non-nullable fields that are read from (and which are easier and safer to work with)
+		if fromEntity.id != nil {
+			fromEntity.ID = *fromEntity.id
+		}
+		if toEntity.id != nil {
+			toEntity.ID = *toEntity.id
+		}
+
+		// record the sender and receiver as part of this conversation
+		if fromEntity.ID > 0 {
+			currentConvo.entities.appendIfUnique(fromEntity.ID)
+		}
+		if toEntity.ID > 0 {
+			currentConvo.entities.appendIfUnique(toEntity.ID)
+		}
+
+		// if entity not added to conversation yet, do so now
+		// TODO: a more correct algorithm is to add the entity if it doesn't exist, but if it does, add the attribute to it if it isn't already
+		var fromEntFound, toEntFound bool
+		for _, ent := range currentConvo.Entities {
+			if fromEntFound && toEntFound {
+				break
+			}
+			if ent.ID == fromEntity.ID {
+				fromEntFound = true
+				continue
+			}
+			if ent.ID == toEntity.ID {
+				toEntFound = true
+				continue
+			}
+		}
+		if !fromEntFound {
+			if fromEntity.name != nil {
+				fromEntity.Name = *fromEntity.name
+			}
+			fromEntity.Attributes = append(fromEntity.Attributes, fromAttr.attribute())
+			currentConvo.Entities = append(currentConvo.Entities, fromEntity)
+		}
+		if !toEntFound {
+			if toEntity.name != nil {
+				toEntity.Name = *toEntity.name
+			}
+			toEntity.Attributes = append(toEntity.Attributes, toAttr.attribute())
+			currentConvo.Entities = append(currentConvo.Entities, toEntity)
+		}
+
+		if ir.Timestamp != nil {
+			*untilUnixMs = ir.Timestamp.UnixMilli()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 // LoadConversation loads the conversation according to select search parameters.

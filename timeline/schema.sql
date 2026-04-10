@@ -244,6 +244,15 @@ CREATE TABLE IF NOT EXISTS "relationships" (
 -- and this way only 1 index is necessary, not multiple on the various fields we check for uniqueness
 CREATE INDEX IF NOT EXISTS "idx_relationships_from_item_id" ON "relationships"("from_item_id");
 
+-- This speeds up search queries and conversation loading that JOIN on relationships.to_item_id or filter by to_attribute_id
+CREATE INDEX IF NOT EXISTS "idx_relationships_to_item_id" ON "relationships"("to_item_id");
+CREATE INDEX IF NOT EXISTS "idx_relationships_to_attribute_id" ON "relationships"("to_attribute_id");
+
+-- These indexes speed up search queries that filter or JOIN on classification_id, attribute_id, and spatial coordinates
+CREATE INDEX IF NOT EXISTS "idx_items_classification_id" ON "items"("classification_id");
+CREATE INDEX IF NOT EXISTS "idx_items_attribute_id" ON "items"("attribute_id");
+CREATE INDEX IF NOT EXISTS "idx_items_lat_lon" ON "items"("latitude", "longitude") WHERE latitude IS NOT NULL AND longitude IS NOT NULL;
+
 -- Relations define the way relationships connect. They are described by natural
 -- language phrases such as "in reply to", "picture of", or "attached to"; or could
 -- be words like "siblings", "coworkers", or "related". Relations will either be

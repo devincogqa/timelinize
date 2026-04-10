@@ -158,7 +158,8 @@ func (tl *Timeline) prepareEntitySearchQuery(params EntitySearchParams) (string,
 	// TODO: explain this query
 	// (LEFT JOINs are done on the attributes and entity_attributes in case they opened a brand
 	// new repo with no attributes about themselves, otherwise nothing will show up)
-	q := `SELECT
+	var sb strings.Builder
+	sb.WriteString(`SELECT
 		entities.id,
 		entities.type_id,
 		entity_types.name,
@@ -183,37 +184,40 @@ func (tl *Timeline) prepareEntitySearchQuery(params EntitySearchParams) (string,
 	LEFT JOIN entity_attributes AS specific_entity_attributes ON specific_entity_attributes.entity_id = entities.id
 	LEFT JOIN attributes ON attributes.id = all_entity_attributes.attribute_id
 	LEFT JOIN attributes AS specific_attributes ON specific_attributes.id = specific_entity_attributes.attribute_id
-	`
+	`)
 
 	// build the WHERE in terms of groups of OR's that are AND'ed together
 	var args []any
 	var clauseCount int
 	and := func(ors func()) {
 		clauseCount = 0
+		lenBefore := sb.Len()
 		if len(args) == 0 {
-			q += " WHERE"
+			sb.WriteString(" WHERE")
 		} else {
 			if params.OrFields {
-				q += " OR"
+				sb.WriteString(" OR")
 			} else {
-				q += " AND"
+				sb.WriteString(" AND")
 			}
 		}
-		q += " ("
+		sb.WriteString(" (")
 		ors()
-		q += ")"
+		sb.WriteString(")")
 
-		// if the clause turned out to be empty,
-		// this is a poor-man's way of undoing it
-		q = strings.TrimSuffix(q, " OR ()")
-		q = strings.TrimSuffix(q, " AND ()")
-		q = strings.TrimSuffix(q, " WHERE ()")
+		// if the clause turned out to be empty, undo it by
+		// truncating the builder back to where we started
+		if clauseCount == 0 {
+			tmp := sb.String()[:lenBefore]
+			sb.Reset()
+			sb.WriteString(tmp)
+		}
 	}
 	or := func(clause string, vals ...any) {
 		if clauseCount > 0 {
-			q += " OR "
+			sb.WriteString(" OR ")
 		}
-		q += clause
+		sb.WriteString(clause)
 		args = append(args, vals...)
 		clauseCount++
 	}
@@ -273,7 +277,7 @@ func (tl *Timeline) prepareEntitySearchQuery(params EntitySearchParams) (string,
 	// remove duplicate rows, which happens when an entity has more than one attribute
 	// (I think it's because we have 2 JOIN paths -- doesn't happen with just 1 JOIN path)
 	// (if this turns out to be buggy, maybe we need conditional JOINs above, like with CASE...)
-	q += "\nGROUP BY entities.id, attributes.id"
+	sb.WriteString("\nGROUP BY entities.id, attributes.id")
 
 	// sort direction
 	sortDir := strings.ToUpper(string(params.Sort))
@@ -297,19 +301,23 @@ func (tl *Timeline) prepareEntitySearchQuery(params EntitySearchParams) (string,
 	// ordering
 	switch params.OrderBy {
 	case "item_count":
-		q += "\nORDER BY max(item_count) OVER (PARTITION BY entities.id) " + sortDir
+		sb.WriteString("\nORDER BY max(item_count) OVER (PARTITION BY entities.id) ")
+		sb.WriteString(sortDir)
 	// TODO: restore this (it is now an attribute)
 	// case "birth_date":
-	// 	q += "\nORDER BY abs(? - entities.birth_date), entities.id " + sortDir
+	// 	sb.WriteString("\nORDER BY abs(? - entities.birth_date), entities.id " + sortDir)
 	// 	args = append(args, params.BirthDate.Unix())
 	case "attribute":
-		q += "\nORDER BY attribute.value " + sortDir
+		sb.WriteString("\nORDER BY attribute.value ")
+		sb.WriteString(sortDir)
 	case "id":
-		q += "\nORDER BY entities.id " + sortDir
+		sb.WriteString("\nORDER BY entities.id ")
+		sb.WriteString(sortDir)
 	case "name", "":
-		q += "\nORDER BY entities.name " + sortDir
+		sb.WriteString("\nORDER BY entities.name ")
+		sb.WriteString(sortDir)
 	}
-	q += " NULLS LAST"
+	sb.WriteString(" NULLS LAST")
 
 	// limit (this limits the total rows; keep in mind that a single person can take up several rows from multiple attributes)
 	// if specific entities are being requested, no limit; otherwise make sure it doesn't go crazy
@@ -317,9 +325,9 @@ func (tl *Timeline) prepareEntitySearchQuery(params EntitySearchParams) (string,
 		params.Limit = 0 // allow on average this many attributes per entity; this is just an arbitrary multiplier for now...
 	}
 	if params.Limit > 0 {
-		q += "\nLIMIT ?"
+		sb.WriteString("\nLIMIT ?")
 		args = append(args, params.Limit)
 	}
 
-	return q, args, nil
+	return sb.String(), args, nil
 }

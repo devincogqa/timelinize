@@ -208,6 +208,14 @@ func openSqliteDB(ctx context.Context, dbPath string) (sqliteDB, error) {
 	if err != nil {
 		return db, fmt.Errorf("opening database read pool: %w", err)
 	}
+	// Allow concurrent readers up to the number of CPUs; SQLite WAL mode
+	// supports concurrent reads, but unbounded connections waste memory and
+	// file descriptors without benefit.
+	maxReaders := runtime.NumCPU()
+	if maxReaders < 2 {
+		maxReaders = 2
+	}
+	db.ReadPool.SetMaxOpenConns(maxReaders)
 
 	// ensure DB file exists before we try querying it with a read-only connection
 	if err := db.WritePool.PingContext(ctx); err != nil {
