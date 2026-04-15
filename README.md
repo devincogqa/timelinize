@@ -1,3 +1,4 @@
+<!-- Dummy PR - minor documentation update -->
 <a href="https://timelinize.com">
 	<picture>
 		<source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/timelinize/timelinize/main/frontend/resources/images/logo-dark.svg">
