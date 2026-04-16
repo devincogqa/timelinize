@@ -6,9 +6,19 @@ runs:
     - name: Get latest libvips version
       id: libvips-version
       shell: bash
-      # sometimes this step spuriously fails; just kick it (restart the job) and it should work again
       run: |
-        LATEST_VERSION=$(curl -s https://api.github.com/repos/libvips/libvips/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        for i in 1 2 3; do
+          LATEST_VERSION=$(curl -sf https://api.github.com/repos/libvips/libvips/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+          if [ -n "$LATEST_VERSION" ]; then
+            break
+          fi
+          echo "Attempt $i failed, retrying in 5s..."
+          sleep 5
+        done
+        if [ -z "$LATEST_VERSION" ]; then
+          echo "::error::Failed to fetch latest libvips version after 3 attempts"
+          exit 1
+        fi
         echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
         echo "Latest libvips version: $LATEST_VERSION"
 
