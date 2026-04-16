@@ -329,7 +329,6 @@ var timestampPatterns = []timestampPattern{
 	{dateFormat: "2006\\1", re: regexp.MustCompile(`\d{4}\\d\d?`)},
 	{dateFormat: "2006-1", re: regexp.MustCompile(`\d{4}-\d\d?`)},
 	{dateFormat: "2006", re: regexp.MustCompile(`\d{4}`)},
-	// TODO: these next few formats have flaky tests... (UPDATE MAY 10, 2022, I think I got the flakiness gone by fixing the nested for loops above) sometimes it fails because it doesn't choose the one with PM..},
 	{dateFormat: "15:04", re: regexp.MustCompile(`\d\d?:\d\d`)},
 	{dateFormat: "3:04PM", re: regexp.MustCompile(`(?i)\d\d?:\d\d[AP]M`)},
 	{dateFormat: "3:04 PM", re: regexp.MustCompile(`(?i)\d\d?:\d\d [AP]M`)},

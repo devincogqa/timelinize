@@ -105,7 +105,6 @@ func TestTimestampFromFilePath(t *testing.T) {
 			// good test case because result should be aggregate
 			// of two timestamps with different information, while
 			// ignoring third, disjoint non-timestamp ("2022/3")
-			// TODO: this test is flaky! sometimes it passes and sometimes it fails. must be relying on map ordering or something...
 			filepath: "text_files/4 January 2022/3:59pm.txt",
 			expect:   time.Date(2022, time.January, 4, 15, 59, 0, 0, time.Local),
 		},
