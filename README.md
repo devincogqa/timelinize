@@ -161,6 +161,10 @@ And if everyone had their own timeline, in theory they could be merged into a gl
 
 I've been working on this project since about 2013, even before I conceptualized [Caddy](https://caddyserver.com). My initial vision was to create an automated backup of my Picasa albums that I could store on my own hard drive. This project was called Photobak. Picasa eventually became Google Photos, and about the same time I realized I wanted to backup my photos posted to Facebook, Instagram, and Twitter, too. And while I was at it, why not include my Google Location History to augment the location data from the photos. The vision continued to expand as I realized that my family could use this too, so the schema was upgraded to support multiple people/entities as well. This could allow us to merge databases, or timelines, as family members pass, or as they share parts of their timeline around with each other. Timelinize is the mature evolution of the original project that is now designed to be a comprehensive, highly detailed archive of one's life through digital (or _digitized_) content. An authoritative, unified record that is easy to preserve and organize.
 
+## Contributing
+
+Contributions are welcome! Please open an issue or pull request.
+
 ## License
 
 This project is licensed with AGPL. I chose this license because I do not want others, especially companies, to make proprietary or commercial software using this package. The point of this project is liberation of and control over one's own personal data, and I want to ensure that this project won't perpetuate or exacerbate the walled garden problem we already face today. Even if the future of this project ever has proprietary source code, I can ensure it will stay aligned with my values and the project's original goals.
