@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simplified PostgreSQL B-Tree Index (Root to Leaf)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin: 24px 0 4px;
+      font-size: 1.6rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #a8e6cf;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 12px;
+    }
+
+    #canvas-wrap {
+      position: relative;
+      width: 960px;
+      max-width: 98vw;
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #ddd;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+      max-width: 260px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    #tooltip.visible { opacity: 1; }
+    #tooltip strong { color: #a8e6cf; }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 24px;
+      margin: 16px 0 24px;
+      font-size: 0.8rem;
+      color: #aaa;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.15);
+    }
+
+    /* Search panel */
+    .search-panel {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0 4px;
+    }
+    .search-panel input {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 8px 14px;
+      color: #eee;
+      font-size: 0.9rem;
+      width: 180px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-panel input:focus { border-color: #a8e6cf; }
+    .search-panel button {
+      background: #0f3460;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 18px;
+      color: #a8e6cf;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .search-panel button:hover { background: #1a4a7a; }
+    .search-result {
+      font-size: 0.8rem;
+      color: #f0a500;
+      min-height: 1.2em;
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Simplified PostgreSQL B-Tree Index</h1>
+<p class="subtitle">Interactive visualization &mdash; hover nodes to inspect, search to trace lookup paths</p>
+
+<div class="search-panel">
+  <input id="searchInput" type="number" placeholder="Search key (e.g. 25)" min="1" max="99">
+  <button id="searchBtn">Lookup</button>
+  <button id="resetBtn">Reset</button>
+</div>
+<div class="search-result" id="searchResult"></div>
+
+<div id="canvas-wrap">
+  <svg id="btree" viewBox="0 0 960 620" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#56c87a"></div> Root</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#7ecf8f"></div> Internal</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#a8e6cf"></div> Leaf</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f0a500"></div> Search path</div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ── B-Tree data ──
+const nodes = [
+  { id: 'root',   keys: [10, 30],      type: 'root',     cx: 480, cy: 80  },
+  { id: 'i1',     keys: [5, 8],        type: 'internal', cx: 180, cy: 220 },
+  { id: 'i2',     keys: [12, 18],      type: 'internal', cx: 480, cy: 220 },
+  { id: 'i3',     keys: [31, 42],      type: 'internal', cx: 780, cy: 220 },
+  { id: 'l1',     keys: [1, 3, 4],     type: 'leaf',     cx: 60,  cy: 400 },
+  { id: 'l2',     keys: [6, 7, 9],     type: 'leaf',     cx: 200, cy: 400 },
+  { id: 'l3',     keys: [11, 13, 15],  type: 'leaf',     cx: 360, cy: 400 },
+  { id: 'l4',     keys: [19, 25, 28],  type: 'leaf',     cx: 520, cy: 400 },
+  { id: 'l5',     keys: [32, 35, 39],  type: 'leaf',     cx: 700, cy: 400 },
+  { id: 'l6',     keys: [43, 45, 48],  type: 'leaf',     cx: 880, cy: 400 },
+];
+
+const edges = [
+  { from: 'root', to: 'i1' },
+  { from: 'root', to: 'i2' },
+  { from: 'root', to: 'i3' },
+  { from: 'i1',   to: 'l1' },
+  { from: 'i1',   to: 'l2' },
+  { from: 'i2',   to: 'l3' },
+  { from: 'i2',   to: 'l4' },
+  { from: 'i3',   to: 'l5' },
+  { from: 'i3',   to: 'l6' },
+];
+
+// B-Tree search logic: which nodes would be visited for a given key
+function searchPath(key) {
+  const path = [];
+  // Root
+  const root = nodes.find(n => n.id === 'root');
+  path.push(root.id);
+
+  let internalId;
+  if (key < 10) internalId = 'i1';
+  else if (key < 30) internalId = 'i2';
+  else internalId = 'i3';
+  path.push(internalId);
+
+  // Leaf mapping
+  const leafMap = {
+    i1: { thresholds: [5, 8], children: ['l1', 'l2', null] },
+    i2: { thresholds: [12, 18], children: ['l3', 'l4', null] },
+    i3: { thresholds: [31, 42], children: ['l5', 'l6', null] },
+  };
+  const m = leafMap[internalId];
+  let leafId = null;
+  if (key < m.thresholds[0]) leafId = m.children[0];
+  else if (key < m.thresholds[1]) leafId = m.children[1];
+  else leafId = m.children[2]; // beyond second key — no leaf shown for some
+
+  // Map to the actual available leaf (if the "beyond" child is null, pick the last available)
+  if (!leafId) {
+    // For i1 (keys >= 8), i3 (keys >= 42) — map to the closest leaf
+    if (internalId === 'i1') leafId = 'l2';
+    else if (internalId === 'i2') leafId = 'l4';
+    else leafId = 'l6';
+  }
+  path.push(leafId);
+
+  // Check if key actually exists in the leaf
+  const leaf = nodes.find(n => n.id === leafId);
+  const found = leaf.keys.includes(key);
+  return { path, leafId, found };
+}
+
+// ── Rendering ──
+const svg = document.getElementById('btree');
+const tooltip = document.getElementById('tooltip');
+const nodeMap = {};
+nodes.forEach(n => nodeMap[n.id] = n);
+
+const RADIUS = 38;
+const colors = { root: '#56c87a', internal: '#7ecf8f', leaf: '#a8e6cf' };
+const highlightColor = '#f0a500';
+const dimColor = '#2a2a4a';
+
+// Create defs for arrow marker
+const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+defs.innerHTML = `
+  <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="#555"/>
+  </marker>
+  <marker id="arrowhead-hl" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+    <polygon points="0 0, 10 3.5, 0 7" fill="${highlightColor}"/>
+  </marker>
+  <filter id="glow">
+    <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+    <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="shadow">
+    <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+  </filter>
+`;
+svg.appendChild(defs);
+
+// Draw edges
+const edgeEls = {};
+edges.forEach(e => {
+  const f = nodeMap[e.from], t = nodeMap[e.to];
+  const dx = t.cx - f.cx, dy = t.cy - f.cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const ux = dx/dist, uy = dy/dist;
+
+  const x1 = f.cx + ux * RADIUS;
+  const y1 = f.cy + uy * RADIUS;
+  const x2 = t.cx - ux * (RADIUS + 10);
+  const y2 = t.cy - uy * (RADIUS + 10);
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1);
+  line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2);
+  line.setAttribute('y2', y2);
+  line.setAttribute('stroke', '#555');
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('marker-end', 'url(#arrowhead)');
+  line.style.transition = 'stroke 0.3s, stroke-width 0.3s';
+  svg.appendChild(line);
+  edgeEls[e.from + '-' + e.to] = line;
+});
+
+// Draw nodes
+const nodeEls = {};
+nodes.forEach(n => {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'node');
+  g.style.cursor = 'pointer';
+
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('cx', n.cx);
+  circle.setAttribute('cy', n.cy);
+  circle.setAttribute('r', RADIUS);
+  circle.setAttribute('fill', colors[n.type]);
+  circle.setAttribute('stroke', 'rgba(255,255,255,0.2)');
+  circle.setAttribute('stroke-width', '2');
+  circle.setAttribute('filter', 'url(#shadow)');
+  circle.style.transition = 'fill 0.3s, stroke 0.3s, r 0.2s';
+  g.appendChild(circle);
+
+  const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  text.setAttribute('x', n.cx);
+  text.setAttribute('y', n.cy + 5);
+  text.setAttribute('text-anchor', 'middle');
+  text.setAttribute('fill', '#1a1a2e');
+  text.setAttribute('font-size', n.keys.length === 3 ? '13' : '15');
+  text.setAttribute('font-weight', '700');
+  text.setAttribute('font-family', "'Segoe UI', sans-serif");
+  text.textContent = n.keys.join(', ');
+  text.style.pointerEvents = 'none';
+  g.appendChild(text);
+
+  // Level label
+  const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  label.setAttribute('x', n.cx);
+  label.setAttribute('y', n.cy + RADIUS + 18);
+  label.setAttribute('text-anchor', 'middle');
+  label.setAttribute('fill', '#666');
+  label.setAttribute('font-size', '11');
+  label.setAttribute('font-family', "'Segoe UI', sans-serif");
+  label.textContent = n.type === 'root' ? 'Root' : n.type === 'internal' ? 'Internal' : 'Leaf';
+  label.style.pointerEvents = 'none';
+  label.style.transition = 'fill 0.3s';
+  g.appendChild(label);
+
+  svg.appendChild(g);
+  nodeEls[n.id] = { g, circle, text, label };
+
+  // Hover
+  g.addEventListener('mouseenter', (ev) => {
+    if (activeSearch) return;
+    highlightSubtree(n.id);
+    showTooltip(ev, n);
+  });
+  g.addEventListener('mousemove', (ev) => moveTooltip(ev));
+  g.addEventListener('mouseleave', () => {
+    if (activeSearch) return;
+    resetHighlights();
+    hideTooltip();
+  });
+});
+
+// Level lines
+[
+  { y: 50, label: 'Level 0' },
+  { y: 190, label: 'Level 1' },
+  { y: 370, label: 'Level 2' },
+].forEach(lv => {
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('x', 940);
+  t.setAttribute('y', lv.y);
+  t.setAttribute('text-anchor', 'end');
+  t.setAttribute('fill', '#444');
+  t.setAttribute('font-size', '11');
+  t.setAttribute('font-family', "'Segoe UI', sans-serif");
+  t.textContent = lv.label;
+  svg.appendChild(t);
+});
+
+// ── Interaction helpers ──
+let activeSearch = false;
+
+function highlightSubtree(nodeId) {
+  // Dim everything first
+  Object.values(nodeEls).forEach(el => {
+    el.circle.setAttribute('fill', dimColor);
+    el.circle.setAttribute('stroke', 'rgba(255,255,255,0.05)');
+    el.label.setAttribute('fill', '#333');
+  });
+  Object.values(edgeEls).forEach(l => {
+    l.setAttribute('stroke', '#2a2a3a');
+    l.setAttribute('marker-end', 'url(#arrowhead)');
+  });
+
+  // Highlight this node and its connected nodes
+  const connected = new Set([nodeId]);
+  edges.forEach(e => {
+    if (e.from === nodeId) connected.add(e.to);
+    if (e.to === nodeId) connected.add(e.from);
+  });
+
+  connected.forEach(id => {
+    const el = nodeEls[id];
+    const n = nodeMap[id];
+    el.circle.setAttribute('fill', colors[n.type]);
+    el.circle.setAttribute('stroke', 'rgba(255,255,255,0.4)');
+    el.label.setAttribute('fill', '#888');
+  });
+
+  edges.forEach(e => {
+    if (connected.has(e.from) && connected.has(e.to)) {
+      const l = edgeEls[e.from + '-' + e.to];
+      l.setAttribute('stroke', '#aaa');
+      l.setAttribute('stroke-width', '3');
+    }
+  });
+}
+
+function highlightPath(pathIds) {
+  // Dim everything
+  Object.values(nodeEls).forEach(el => {
+    el.circle.setAttribute('fill', dimColor);
+    el.circle.setAttribute('stroke', 'rgba(255,255,255,0.05)');
+    el.label.setAttribute('fill', '#333');
+  });
+  Object.values(edgeEls).forEach(l => {
+    l.setAttribute('stroke', '#2a2a3a');
+    l.setAttribute('stroke-width', '2');
+    l.setAttribute('marker-end', 'url(#arrowhead)');
+  });
+
+  const pathSet = new Set(pathIds);
+  pathIds.forEach(id => {
+    const el = nodeEls[id];
+    el.circle.setAttribute('fill', highlightColor);
+    el.circle.setAttribute('stroke', '#fff');
+    el.circle.setAttribute('filter', 'url(#glow)');
+    el.label.setAttribute('fill', highlightColor);
+  });
+
+  // Highlight edges along path
+  for (let i = 0; i < pathIds.length - 1; i++) {
+    const key = pathIds[i] + '-' + pathIds[i+1];
+    const l = edgeEls[key];
+    if (l) {
+      l.setAttribute('stroke', highlightColor);
+      l.setAttribute('stroke-width', '3.5');
+      l.setAttribute('marker-end', 'url(#arrowhead-hl)');
+    }
+  }
+}
+
+function resetHighlights() {
+  activeSearch = false;
+  Object.entries(nodeEls).forEach(([id, el]) => {
+    const n = nodeMap[id];
+    el.circle.setAttribute('fill', colors[n.type]);
+    el.circle.setAttribute('stroke', 'rgba(255,255,255,0.2)');
+    el.circle.setAttribute('filter', 'url(#shadow)');
+    el.label.setAttribute('fill', '#666');
+  });
+  Object.values(edgeEls).forEach(l => {
+    l.setAttribute('stroke', '#555');
+    l.setAttribute('stroke-width', '2');
+    l.setAttribute('marker-end', 'url(#arrowhead)');
+  });
+  document.getElementById('searchResult').textContent = '';
+}
+
+function showTooltip(ev, node) {
+  const tt = document.getElementById('tooltip');
+  const typeLabel = { root: 'Root Node', internal: 'Internal Node', leaf: 'Leaf Node' };
+  let rangeInfo = '';
+  if (node.type === 'root') {
+    rangeInfo = `<br>Separates keys into ${node.keys.length + 1} subtrees`;
+  } else if (node.type === 'internal') {
+    rangeInfo = `<br>Routes lookups via keys <strong>${node.keys.join(', ')}</strong>`;
+  } else {
+    rangeInfo = `<br>Stores actual row pointers`;
+  }
+  tt.innerHTML = `<strong>${typeLabel[node.type]}</strong><br>Keys: <strong>[${node.keys.join(', ')}]</strong>${rangeInfo}`;
+  tt.classList.add('visible');
+  moveTooltip(ev);
+}
+
+function moveTooltip(ev) {
+  const tt = document.getElementById('tooltip');
+  tt.style.left = (ev.clientX + 16) + 'px';
+  tt.style.top = (ev.clientY + 16) + 'px';
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+// ── Search ──
+document.getElementById('searchBtn').addEventListener('click', doSearch);
+document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('resetBtn').addEventListener('click', resetHighlights);
+
+function doSearch() {
+  const val = parseInt(document.getElementById('searchInput').value, 10);
+  if (isNaN(val)) return;
+
+  const result = searchPath(val);
+  activeSearch = true;
+  highlightPath(result.path);
+
+  const leaf = nodeMap[result.leafId];
+  const resultEl = document.getElementById('searchResult');
+  if (result.found) {
+    resultEl.innerHTML = `Key <strong>${val}</strong> found in leaf node [${leaf.keys.join(', ')}]. Path: ${result.path.map(id => '[' + nodeMap[id].keys.join(', ') + ']').join(' &rarr; ')}`;
+    resultEl.style.color = '#a8e6cf';
+  } else {
+    resultEl.innerHTML = `Key <strong>${val}</strong> not found. Traversal would visit: ${result.path.map(id => '[' + nodeMap[id].keys.join(', ') + ']').join(' &rarr; ')}`;
+    resultEl.style.color = '#f0a500';
+  }
+}
+
+// Animate nodes on load
+nodes.forEach((n, i) => {
+  const el = nodeEls[n.id];
+  el.circle.setAttribute('r', '0');
+  setTimeout(() => {
+    el.circle.style.transition = 'r 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), fill 0.3s, stroke 0.3s';
+    el.circle.setAttribute('r', RADIUS);
+  }, i * 80);
+});
+</script>
+
+</body>
+</html>
