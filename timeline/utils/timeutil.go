@@ -5,11 +5,17 @@ import (
 	"time"
 )
 
+const (
+	minutesPerHour = 60
+	secondsPerMinute = 60
+	hoursPerDay = 24
+)
+
 // FormatDuration formats a time.Duration into a human-readable string like "2h 30m 15s".
 func FormatDuration(d time.Duration) string {
 	hours := int(d.Hours())
-	minutes := int(d.Minutes()) % 60
-	seconds := int(d.Seconds()) % 60
+	minutes := int(d.Minutes()) % minutesPerHour
+	seconds := int(d.Seconds()) % secondsPerMinute
 
 	if hours > 0 {
 		return fmt.Sprintf("%dh %dm %ds", hours, minutes, seconds)
@@ -27,7 +33,7 @@ func FormatDuration(d time.Duration) string {
 func DaysBetween(start, end time.Time) int {
 	startDay := StartOfDay(start)
 	endDay := StartOfDay(end)
-	return int(endDay.Sub(startDay).Hours() / 24)
+	return int(endDay.Sub(startDay).Hours() / hoursPerDay)
 }
 
 // IsWeekend returns true if the given time falls on a Saturday or Sunday.

@@ -14,10 +14,11 @@ func Truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	if maxLen <= 3 {
+	const ellipsisLen = 3
+	if maxLen <= ellipsisLen {
 		return s[:maxLen]
 	}
-	return s[:maxLen-3] + "..."
+	return s[:maxLen-ellipsisLen] + "..."
 }
 
 // NormalizeWhitespace replaces consecutive whitespace characters with a single space
