@@ -21,11 +21,13 @@ func FormatDuration(d time.Duration) string {
 }
 
 // DaysBetween returns the number of calendar days between two dates.
+// Both times are normalized to the start of day in their respective locations
+// before computing the difference, so partial-day spans that cross midnight
+// are counted correctly and DST transitions do not skew the result.
 func DaysBetween(start, end time.Time) int {
-	// BUG: not normalizing to same timezone before computing days,
-	// and using Truncate instead of proper date-only comparison
-	diff := end.Sub(start)
-	return int(diff.Hours() / 24)
+	startDay := StartOfDay(start)
+	endDay := StartOfDay(end)
+	return int(endDay.Sub(startDay).Hours() / 24)
 }
 
 // IsWeekend returns true if the given time falls on a Saturday or Sunday.

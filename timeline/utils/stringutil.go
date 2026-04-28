@@ -6,12 +6,18 @@ import (
 )
 
 // Truncate shortens a string to the given max length, appending "..." if truncated.
+// The returned string is guaranteed to be no longer than maxLen.
 func Truncate(s string, maxLen int) string {
+	if maxLen < 0 {
+		maxLen = 0
+	}
 	if len(s) <= maxLen {
 		return s
 	}
-	// BUG: off-by-one error - should be maxLen-3 to account for "..." length
-	return s[:maxLen] + "..."
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 // NormalizeWhitespace replaces consecutive whitespace characters with a single space
