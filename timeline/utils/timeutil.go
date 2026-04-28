@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	minutesPerHour = 60
+	minutesPerHour   = 60
 	secondsPerMinute = 60
-	hoursPerDay = 24
+	hoursPerDay      = 24
 )
 
 // FormatDuration formats a time.Duration into a human-readable string like "2h 30m 15s".
