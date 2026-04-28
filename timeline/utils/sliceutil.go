@@ -25,7 +25,9 @@ func Contains[T comparable](items []T, target T) bool {
 
 // Chunk splits a slice into chunks of the given size.
 func Chunk[T any](items []T, size int) [][]T {
-	// BUG: no guard against size <= 0, will cause infinite loop or panic
+	if size <= 0 {
+		return nil
+	}
 	var chunks [][]T
 	for i := 0; i < len(items); i += size {
 		end := i + size
