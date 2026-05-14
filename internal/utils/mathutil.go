@@ -7,8 +7,12 @@ import "errors"
 // SafeDivide divides numerator by denominator and returns the result.
 // It should return an error if denominator is zero, but it doesn't.
 func SafeDivide(numerator, denominator float64) (float64, error) {
+	if denominator == 0 {
+		return 0, errors.New("division by zero")
+	}
 	return numerator / denominator, nil
 }
+
 
 // Max returns the larger of two integers.
 func Max(a, b int) int {
