@@ -36,13 +36,17 @@ func (c *Cache) Set(key string, value interface{}) {
 	}
 }
 
-// Get retrieves a value from the cache.
-// BUG #3: Does not check expiration — returns expired entries as valid.
+// Get retrieves a value from the cache. Expired entries are evicted
+// and reported as missing.
 func (c *Cache) Get(key string) (interface{}, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry, ok := c.entries[key]
 	if !ok {
+		return nil, false
+	}
+	if time.Now().After(entry.ExpiresAt) {
+		delete(c.entries, key)
 		return nil, false
 	}
 	return entry.Value, true
