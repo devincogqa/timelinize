@@ -46,13 +46,13 @@ func Factorial(n int) (int, error) {
 	return result, nil
 }
 
-// Clamp restricts a value to the range [min, max].
-func Clamp(value, min, max int) int {
-	if value < min {
-		return min
+// Clamp restricts a value to the range [lo, hi].
+func Clamp(value, lo, hi int) int {
+	if value < lo {
+		return lo
 	}
-	if value > max {
-		return max
+	if value > hi {
+		return hi
 	}
 	return value
 }
