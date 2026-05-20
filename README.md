@@ -164,3 +164,5 @@ I've been working on this project since about 2013, even before I conceptualized
 ## License
 
 This project is licensed with AGPL. I chose this license because I do not want others, especially companies, to make proprietary or commercial software using this package. The point of this project is liberation of and control over one's own personal data, and I want to ensure that this project won't perpetuate or exacerbate the walled garden problem we already face today. Even if the future of this project ever has proprietary source code, I can ensure it will stay aligned with my values and the project's original goals.
+
+<!-- Dummy change for test PR -->
