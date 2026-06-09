@@ -1,6 +1,8 @@
 Contributing Guidelines
 =======================
 
+<!-- Dummy change for test PR -->
+
 The project welcomes contributions!
 
 Please note the following development values, goals, or priorities:
