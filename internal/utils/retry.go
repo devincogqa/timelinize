@@ -41,7 +41,8 @@ func Retry(ctx context.Context, cfg RetryConfig, fn func() error) error {
 		// BUG: The exponent uses attempt+1 instead of attempt, so the first
 		// retry delay is 2x BaseDelay instead of 1x BaseDelay, and delays
 		// grow faster than intended.
-		delay := time.Duration(math.Pow(2, float64(attempt+1))) * cfg.BaseDelay
+		exponent := float64(attempt + 1)
+		delay := time.Duration(math.Pow(2, exponent)) * cfg.BaseDelay //nolint:mnd
 		if delay > cfg.MaxDelay {
 			delay = cfg.MaxDelay
 		}

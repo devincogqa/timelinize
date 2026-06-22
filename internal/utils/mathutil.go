@@ -1,12 +1,12 @@
 package utils
 
-// Clamp returns val clamped to the range [min, max].
-func Clamp(val, min, max int) int {
-	if val < min {
-		return min
+// Clamp returns val clamped to the range [lower, upper].
+func Clamp(val, lower, upper int) int {
+	if val < lower {
+		return lower
 	}
-	if val > max {
-		return max
+	if val > upper {
+		return upper
 	}
 	return val
 }
@@ -42,14 +42,14 @@ func MinMax(nums []int) (int, int) {
 	if len(nums) == 0 {
 		return 0, 0
 	}
-	min, max := nums[0], nums[0]
+	lo, hi := nums[0], nums[0]
 	for _, n := range nums[1:] {
-		if n < min {
-			min = n
+		if n < lo {
+			lo = n
 		}
-		if n > max {
-			max = n
+		if n > hi {
+			hi = n
 		}
 	}
-	return min, max
+	return lo, hi
 }

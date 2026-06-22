@@ -11,10 +11,11 @@ func TruncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	if maxLen <= 3 {
+	const ellipsisLen = 3
+	if maxLen <= ellipsisLen {
 		return s[:maxLen]
 	}
-	return s[:maxLen-3] + "..."
+	return s[:maxLen-ellipsisLen] + "..."
 }
 
 // SlugifyString converts a string to a URL-friendly slug.
